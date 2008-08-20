@@ -1,0 +1,58 @@
+CC     = gcc
+CFLAGS = -pipe -march=i386 -m32 -W -Wall -Wextra -ansi -pedantic -ffreestanding -fno-builtin -nostdlib -nostartfiles -nodefaultlibs -Os
+AFLAGS = -f elf
+
+OBJS = start.o crt0.o main.o kernel.o video.o
+
+kernel.bin: $(OBJS)
+	ld -L../../lib/ -T kernel.ld -o kernel.bin $(OBJS) -lc
+
+.c.o:
+	$(CC) -I../../include/ $(CFLAGS) -c -o $@ $<
+
+start.o: start.asm
+	nasm $(AFLAGS) $< -o $@
+
+depend:
+	sed '/\#\#\# DEPENDENCIES \#\#\#/q' < Makefile > Makefile.tmp
+	gcc -M -I../../include *.c >> Makefile.tmp
+	mv Makefile.tmp Makefile
+
+clean:
+	rm -f $(OBJS)
+	rm -f kernel.bin
+
+test:
+	dd if=kernel.bin seek=2 bs=512 of=../../build/floppy.img conv=notrunc
+	qemu -fda ../../build/floppy.img -boot a -m 2
+
+install:
+	dd if=kernel.bin seek=2 bs=512 of=/dev/fd0
+
+full:
+	$(MAKE) clean
+	@echo
+	$(MAKE) depend
+	@echo
+	$(MAKE)
+	@echo
+	$(MAKE) test
+
+dist:
+	$(MAKE) clean
+	@echo
+	rm -f Makefile
+	sed '/\#\#\# DEPENDENCIES \#\#\#/q' < Makefile.linux > Makefile.tmp
+	gcc -M -I../../include *.c >> Makefile.tmp
+	mv Makefile.tmp Makefile.linux
+	sed '/\#\#\# DEPENDENCIES \#\#\#/q' < Makefile.cygwin > Makefile.tmp
+	gcc -M -I../../include *.c >> Makefile.tmp
+	mv Makefile.tmp Makefile.cygwin
+
+### DEPENDENCIES ###
+crt0.o: crt0.c
+kernel.o: kernel.c ../../include/torix/kernel.h
+main.o: main.c ../../include/torix/kernel.h ../../include/torix/video.h \
+  ../../include/stdlib.h
+video.o: video.c ../../include/torix/kernel.h ../../include/torix/video.h \
+  ../../include/string.h
